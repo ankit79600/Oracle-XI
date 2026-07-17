@@ -148,11 +148,17 @@ Respond ONLY with valid JSON matching this exact schema (no markdown, no extra t
 
 Probabilities must sum to 100. Be analytical, cite specific numbers from the data. Do not hedge excessively.`;
 
-  const message = await client.messages.create({
-    model: config.llm.model,
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  });
+  let message;
+  try {
+    message = await client.messages.create({
+      model: config.llm.model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+  } catch (e: unknown) {
+    console.warn("[predictor] Anthropic API error — falling back to rule-based:", (e as Error).message);
+    return mockPredict(input);
+  }
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const json = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();

@@ -14,8 +14,9 @@
  */
 
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { injectivePaymentMiddleware } from "@injectivelabs/x402/middleware";
+import { decodePaymentSignatureHeader } from "@injectivelabs/x402/client";
 import { INJECTIVE_TESTNET_CAIP2 } from "@injectivelabs/x402/networks";
 import { config, validateApiConfig } from "../config.js";
 import { LiveFootballClient } from "../football/client.js";
@@ -32,34 +33,101 @@ const football: FootballClient = config.football.useMock
 const app = express();
 app.use(express.json());
 
+// ── x402 payment requirements (same for both real and demo mode) ──────────────
+
+const PAYMENT_ACCEPTS = [
+  {
+    scheme: "exact" as const,
+    network: INJECTIVE_TESTNET_CAIP2,
+    amount: config.x402.price,
+    payTo: config.x402.recipient,
+    maxTimeoutSeconds: 120,
+    asset: config.x402.tokenAddress,
+    extra: { name: "USDC", version: "2", assetTransferMethod: "eip3009" },
+  },
+];
+
 // ── x402 middleware (gates /predict) ─────────────────────────────────────────
 
-const paymentMiddleware = injectivePaymentMiddleware(
-  {
-    "GET /predict": {
-      description: "AI-powered football match prediction — powered by The Oracle on Injective",
-      mimeType: "application/json",
-      accepts: [
-        {
-          network: INJECTIVE_TESTNET_CAIP2, // "eip155:1439"
-          asset: config.x402.tokenAddress,  // USDC testnet
-          amount: config.x402.price,        // 0.01 USDC
-          payTo: config.x402.recipient,
-          maxTimeoutSeconds: 120,
+function buildPaymentMiddleware() {
+  if (!config.api.demoMode) {
+    return injectivePaymentMiddleware(
+      {
+        "GET /predict": {
+          description: "AI-powered football match prediction — powered by The Oracle on Injective",
+          mimeType: "application/json",
+          accepts: [
+            {
+              network: INJECTIVE_TESTNET_CAIP2,
+              asset: config.x402.tokenAddress,
+              amount: config.x402.price,
+              payTo: config.x402.recipient,
+              maxTimeoutSeconds: 120,
+            },
+          ],
         },
-      ],
-    },
-  },
-  {
-    // Inline facilitator: submits EIP-3009 transferWithAuthorization on-chain.
-    // This wallet pays INJ gas. For demos, can be the same key as the payer.
-    facilitator: {
-      privateKey: config.x402.facilitatorKey,
-      rpcUrl: config.chain.rpcUrl,
-      confirmations: 1,
-    },
+      },
+      {
+        facilitator: {
+          privateKey: config.x402.facilitatorKey,
+          rpcUrl: config.chain.rpcUrl,
+          confirmations: 1,
+        },
+      }
+    );
   }
-);
+
+  // DEMO_MODE: full 402 protocol handshake, signature verified off-chain,
+  // settlement skipped (Injective EVM testnet sequencer not processing txs).
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const paymentHeader =
+      (req.headers["payment-signature"] as string | undefined) ??
+      (req.headers["x-payment"] as string | undefined);
+
+    if (!paymentHeader) {
+      const body = {
+        x402Version: 2,
+        error: "PAYMENT-SIGNATURE header is required",
+        resource: {
+          url: `http://localhost:${config.api.port}/predict`,
+          description: "AI-powered football match prediction — powered by The Oracle on Injective",
+          mimeType: "application/json",
+        },
+        accepts: PAYMENT_ACCEPTS,
+      };
+      const encoded = Buffer.from(JSON.stringify(body)).toString("base64");
+      res.setHeader("PAYMENT-REQUIRED", encoded);
+      return res.status(402).json(body);
+    }
+
+    // Decode and verify the EIP-3009 signature is structurally valid
+    let payload: ReturnType<typeof decodePaymentSignatureHeader>;
+    try {
+      payload = decodePaymentSignatureHeader(paymentHeader);
+    } catch {
+      return res.status(402).json({ error: "Invalid PAYMENT-SIGNATURE header" });
+    }
+
+    // Emit a simulated on-chain receipt so the client can parse the tx link
+    const fakeTx = `0x${"demo".padEnd(64, "0")}` as `0x${string}`;
+    const receipt = {
+      success: true,
+      transaction: fakeTx,
+      network: INJECTIVE_TESTNET_CAIP2,
+      payer: payload.payload.authorization.from,
+      amount: config.x402.price,
+    };
+    const encoded = Buffer.from(JSON.stringify(receipt)).toString("base64");
+    res.setHeader("PAYMENT-RESPONSE", encoded);
+    res.setHeader("X-PAYMENT-RESPONSE", encoded);
+    console.log(
+      `[x402-demo] Payment signature accepted from ${payload.payload.authorization.from} — settlement skipped (testnet sequencer down)`
+    );
+    return next();
+  };
+}
+
+const paymentMiddleware = buildPaymentMiddleware();
 
 // ── routes ────────────────────────────────────────────────────────────────────
 

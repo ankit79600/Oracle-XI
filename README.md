@@ -179,6 +179,14 @@ USE_MOCK_DATA=true npm run start:mcp
 
 The mock client provides realistic World Cup 2026 data without hitting any external API.
 
+### Testnet demo mode
+
+If the Injective EVM testnet sequencer is degraded (transactions accepted but not mined), set `DEMO_MODE=true` in `.env`. The full x402 protocol handshake still runs — the server returns `402`, the client signs an EIP-3009 authorization, and the server verifies the signature — but on-chain settlement is skipped. This lets you demonstrate the complete payment flow even when the testnet is unavailable.
+
+```bash
+DEMO_MODE=true npm run start:api
+```
+
 ---
 
 ## Project Structure

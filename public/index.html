@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Oracle — AI World Cup Analyst</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0a0f; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #1a0533 0%, #0d1f4a 100%);
+      border-bottom: 1px solid #2a1f6e;
+      padding: 24px 40px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 1.8rem; color: #c084fc; letter-spacing: 1px; }
+    header p { color: #94a3b8; font-size: 0.9rem; margin-top: 4px; }
+    .badge {
+      background: #1e3a5f; color: #60a5fa; border: 1px solid #2563eb;
+      padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; margin-left: auto;
+    }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .tab {
+      padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+      border: 1px solid #2a2a3e; background: #111120; color: #94a3b8; transition: all 0.2s;
+    }
+    .tab:hover { border-color: #7c3aed; color: #c084fc; }
+    .tab.active { background: #2d1b69; border-color: #7c3aed; color: #c084fc; }
+    .tab.premium { border-color: #d97706; color: #fbbf24; background: #1c1200; }
+    .tab.premium.active { background: #2d1f00; border-color: #f59e0b; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card {
+      background: #111120; border: 1px solid #1e1e3a; border-radius: 12px;
+      padding: 24px; margin-bottom: 20px;
+    }
+    .card h2 { color: #c084fc; margin-bottom: 16px; font-size: 1.1rem; }
+
+    .form-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    input, select {
+      background: #0d0d1a; border: 1px solid #2a2a4e; color: #e0e0e0;
+      padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; flex: 1; min-width: 140px;
+    }
+    input:focus, select:focus { outline: none; border-color: #7c3aed; }
+    button {
+      padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 0.9rem; font-weight: 600; transition: all 0.2s;
+    }
+    .btn-primary { background: #7c3aed; color: white; }
+    .btn-primary:hover { background: #6d28d9; }
+    .btn-primary:disabled { background: #3b2070; color: #6b7280; cursor: not-allowed; }
+    .btn-gold { background: #d97706; color: white; }
+    .btn-gold:hover { background: #b45309; }
+    .btn-gold:disabled { background: #5a3500; color: #6b7280; cursor: not-allowed; }
+
+    .result {
+      background: #0d0d1a; border: 1px solid #1e1e3a; border-radius: 8px;
+      padding: 16px; margin-top: 16px; font-size: 0.85rem; line-height: 1.7;
+      white-space: pre-wrap; color: #cbd5e1; min-height: 60px;
+    }
+    .result.error { border-color: #7f1d1d; color: #fca5a5; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { color: #7c3aed; text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e1e3a; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 10px 12px; border-bottom: 1px solid #111130; font-size: 0.85rem; color: #cbd5e1; }
+    tr:hover td { background: #13132a; }
+    .pos { color: #7c3aed; font-weight: 700; }
+    .pts { color: #c084fc; font-weight: 700; }
+    .form-badge { display: inline-block; padding: 1px 5px; border-radius: 3px; margin: 0 1px; font-size: 0.7rem; font-weight: 700; }
+    .W { background: #14532d; color: #4ade80; }
+    .D { background: #1c2a3a; color: #94a3b8; }
+    .L { background: #7f1d1d; color: #fca5a5; }
+
+    .fixture-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #111130; }
+    .fixture-date { color: #6b7280; font-size: 0.75rem; width: 90px; }
+    .fixture-teams { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .team-name { flex: 1; }
+    .home { text-align: right; }
+    .score { color: #c084fc; font-weight: 700; font-size: 1rem; min-width: 50px; text-align: center; }
+    .status-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; }
+    .SCHEDULED { background: #1e3a5f; color: #60a5fa; }
+    .FINISHED { background: #14532d; color: #4ade80; }
+    .IN_PLAY { background: #7f1d1d; color: #f87171; }
+
+    .prediction-card { background: #0d0d1a; border: 1px solid #2d1b69; border-radius: 12px; padding: 20px; margin-top: 16px; }
+    .prediction-title { color: #c084fc; font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+    .prob-bars { display: flex; gap: 4px; height: 32px; border-radius: 8px; overflow: hidden; margin: 12px 0; }
+    .prob-bar { display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; transition: width 0.6s ease; }
+    .prob-home { background: #7c3aed; color: white; }
+    .prob-draw { background: #374151; color: #d1d5db; }
+    .prob-away { background: #1d4ed8; color: white; }
+    .factors { margin-top: 12px; }
+    .factor { padding: 6px 0; border-bottom: 1px solid #1e1e3a; color: #94a3b8; font-size: 0.85rem; }
+    .factor::before { content: "→ "; color: #7c3aed; }
+    .reasoning { margin-top: 12px; color: #94a3b8; font-size: 0.85rem; line-height: 1.7; }
+    .recommendation { margin-top: 12px; padding: 12px; background: #1a0d3a; border-left: 3px solid #7c3aed; border-radius: 0 8px 8px 0; color: #c084fc; font-weight: 600; }
+    .payment-note { background: #1c1200; border: 1px solid #d97706; border-radius: 8px; padding: 12px 16px; color: #fbbf24; font-size: 0.82rem; margin-top: 12px; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .chain-info { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+    .chain-pill { background: #111130; border: 1px solid #2a2a4e; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; color: #6b7280; }
+    .chain-pill span { color: #c084fc; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ The Oracle</h1>
+    <p>AI World Cup Analyst · Powered by Injective x402</p>
+  </div>
+  <div class="badge">Injective Global Cup 2026</div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('fixtures')">Fixtures</div>
+    <div class="tab" onclick="switchTab('standings')">Standings</div>
+    <div class="tab premium" onclick="switchTab('predict')">⚡ Predict (x402)</div>
+  </div>
+
+  <!-- FIXTURES -->
+  <div class="panel active" id="panel-fixtures">
+    <div class="card">
+      <h2>Match Fixtures</h2>
+      <div class="form-row">
+        <select id="fix-competition">
+          <option value="PL">Premier League</option>
+          <option value="WC">World Cup</option>
+          <option value="CL">Champions League</option>
+          <option value="BL1">Bundesliga</option>
+          <option value="PD">La Liga</option>
+          <option value="SA">Serie A</option>
+          <option value="FL1">Ligue 1</option>
+        </select>
+        <button class="btn-primary" onclick="loadFixtures()">Load Fixtures</button>
+      </div>
+      <div id="fixtures-result"></div>
+    </div>
+  </div>
+
+  <!-- STANDINGS -->
+  <div class="panel" id="panel-standings">
+    <div class="card">
+      <h2>League Standings</h2>
+      <div class="form-row">
+        <select id="std-competition">
+          <option value="PL">Premier League</option>
+          <option value="WC">World Cup</option>
+          <option value="CL">Champions League</option>
+          <option value="BL1">Bundesliga</option>
+          <option value="PD">La Liga</option>
+          <option value="SA">Serie A</option>
+          <option value="FL1">Ligue 1</option>
+        </select>
+        <button class="btn-primary" onclick="loadStandings()">Load Standings</button>
+      </div>
+      <div id="standings-result"></div>
+    </div>
+  </div>
+
+  <!-- PREDICT -->
+  <div class="panel" id="panel-predict">
+    <div class="card">
+      <h2>⚡ AI Match Prediction</h2>
+      <div class="payment-note">
+        🔐 This tool is gated by <strong>x402</strong> — requires 0.01 USDC payment on Injective EVM Testnet (chain 1439).<br>
+        Get testnet USDC at <strong>faucet.circle.com</strong> → select Injective Testnet.
+      </div>
+      <div class="form-row" style="margin-top:16px">
+        <input id="home-team" placeholder="Home team, e.g. Arsenal" />
+        <input id="away-team" placeholder="Away team, e.g. Chelsea" />
+      </div>
+      <div class="form-row">
+        <input id="competition" placeholder="Competition, e.g. Premier League" value="Premier League" />
+        <button class="btn-gold" id="predict-btn" onclick="getPrediction()">Get Prediction</button>
+      </div>
+      <div id="predict-result"></div>
+      <div class="chain-info" style="margin-top:16px">
+        <div class="chain-pill">Chain: <span>Injective EVM Testnet</span></div>
+        <div class="chain-pill">Token: <span>USDC (EIP-3009)</span></div>
+        <div class="chain-pill">Price: <span>0.01 USDC</span></div>
+        <div class="chain-pill">Network: <span>eip155:1439</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const API = 'http://localhost:3002';
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const names = ['fixtures','standings','predict'];
+      t.classList.toggle('active', names[i] === name);
+    });
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+  }
+
+  async function loadFixtures() {
+    const comp = document.getElementById('fix-competition').value;
+    const el = document.getElementById('fixtures-result');
+    el.innerHTML = '<div class="result"><span class="spinner"></span>Loading fixtures...</div>';
+    try {
+      const r = await fetch(`${API}/fixtures?competition=${comp}`);
+      const data = await r.json();
+      const matches = data.fixtures || [];
+      if (!matches.length) { el.innerHTML = '<div class="result">No fixtures found.</div>'; return; }
+      el.innerHTML = matches.slice(0,20).map(m => `
+        <div class="fixture-row">
+          <div class="fixture-date">${m.utcDate.slice(0,10)}</div>
+          <div class="fixture-teams">
+            <div class="team-name home">${m.homeTeam.name}</div>
+            <div class="score">
+              ${m.status === 'FINISHED'
+                ? `${m.score.fullTime.home} - ${m.score.fullTime.away}`
+                : `<span class="status-badge ${m.status}">${m.status}</span>`}
+            </div>
+            <div class="team-name">${m.awayTeam.name}</div>
+          </div>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="result error">Error: ${e.message}\nMake sure the API server is running (npm run start:api)</div>`;
+    }
+  }
+
+  async function loadStandings() {
+    const comp = document.getElementById('std-competition').value;
+    const el = document.getElementById('standings-result');
+    el.innerHTML = '<div class="result"><span class="spinner"></span>Loading standings...</div>';
+    try {
+      const r = await fetch(`${API}/standings?competition=${comp}`);
+      const data = await r.json();
+      const rows = data.standings || [];
+      if (!rows.length) { el.innerHTML = '<div class="result">No standings found.</div>'; return; }
+      el.innerHTML = `<table>
+        <thead><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th><th>Form</th></tr></thead>
+        <tbody>${rows.map(s => `<tr>
+          <td class="pos">${s.position}</td>
+          <td>${s.team.name}</td>
+          <td>${s.playedGames}</td>
+          <td>${s.won}</td>
+          <td>${s.draw}</td>
+          <td>${s.lost}</td>
+          <td>${s.goalDifference > 0 ? '+' : ''}${s.goalDifference}</td>
+          <td class="pts">${s.points}</td>
+          <td>${(s.form || '').split(',').map(f => f ? `<span class="form-badge ${f}">${f}</span>` : '').join('')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } catch(e) {
+      el.innerHTML = `<div class="result error">Error: ${e.message}</div>`;
+    }
+  }
+
+  async function getPrediction() {
+    const home = document.getElementById('home-team').value.trim();
+    const away = document.getElementById('away-team').value.trim();
+    const comp = document.getElementById('competition').value.trim();
+    const btn = document.getElementById('predict-btn');
+    const el = document.getElementById('predict-result');
+
+    if (!home || !away) { el.innerHTML = '<div class="result error">Enter both team names.</div>'; return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Paying via x402...';
+    el.innerHTML = '<div class="result"><span class="spinner"></span>Initiating x402 payment on Injective EVM testnet...</div>';
+
+    try {
+      const r = await fetch(`${API}/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&competition=${encodeURIComponent(comp)}`);
+      if (r.status === 402) {
+        const data = await r.json();
+        el.innerHTML = `<div class="result error">
+⚠️  Payment Required (HTTP 402)
+
+The x402 gate is active. To get a prediction, your wallet needs testnet USDC on Injective.
+
+Network: ${data.accepts?.[0]?.network}
+Token:   ${data.accepts?.[0]?.asset}
+Amount:  ${data.accepts?.[0]?.amount} (0.01 USDC)
+Pay to:  ${data.accepts?.[0]?.payTo}
+
+→ Get testnet USDC at faucet.circle.com (select Injective Testnet)
+→ Then call via the MCP server which handles payment automatically</div>`;
+        return;
+      }
+      const data = await r.json();
+      const p = data.prediction;
+      el.innerHTML = `
+        <div class="prediction-card">
+          <div class="prediction-title">${home} vs ${away}</div>
+          <div style="color:#94a3b8;font-size:0.8rem">Confidence: <strong style="color:#c084fc">${(p.confidence||'').toUpperCase()}</strong> · Predicted: <strong style="color:#c084fc">${p.predictedScore}</strong></div>
+          <div class="prob-bars">
+            <div class="prob-bar prob-home" style="width:${p.homeWinProbability}%">${p.homeWinProbability}%</div>
+            <div class="prob-bar prob-draw" style="width:${p.drawProbability}%">${p.drawProbability}%</div>
+            <div class="prob-bar prob-away" style="width:${p.awayWinProbability}%">${p.awayWinProbability}%</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#6b7280;margin-bottom:12px">
+            <span>${home}</span><span>Draw</span><span>${away}</span>
+          </div>
+          <div class="factors">${(p.keyFactors||[]).map(f => `<div class="factor">${f}</div>`).join('')}</div>
+          <div class="reasoning">${p.reasoning}</div>
+          <div class="recommendation">${p.recommendation}</div>
+          <div style="font-size:0.75rem;color:#4b5563;margin-top:12px">Data: ${data.dataSource} · Chain: ${data.chain}</div>
+        </div>`;
+    } catch(e) {
+      el.innerHTML = `<div class="result error">Error: ${e.message}\nMake sure the API server is running (npm run start:api)</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Get Prediction';
+    }
+  }
+
+  // Auto-load fixtures on start
+  loadFixtures();
+</script>
+</body>
+</html>

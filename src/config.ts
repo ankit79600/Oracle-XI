@@ -42,6 +42,7 @@ export const config = {
   },
   api: {
     port: parseInt(optional("API_PORT", "3002"), 10),
+    demoMode: process.env.DEMO_MODE === "true",
   },
   wallet: {
     // Payer's private key — used by MCP server to sign EIP-3009 authorizations (no gas)
