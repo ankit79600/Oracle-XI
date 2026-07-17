@@ -1,0 +1,33 @@
+{
+  "name": "oracle-xi",
+  "version": "1.0.0",
+  "description": "AI World Cup analyst MCP Server with x402 pay-per-call on Injective",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start:api": "tsx src/api/server.ts",
+    "start:mcp": "tsx src/mcp/server.ts",
+    "start": "concurrently \"npm run start:api\" \"npm run start:mcp\"",
+    "dev:api": "tsx watch src/api/server.ts",
+    "dev:mcp": "tsx watch src/mcp/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.53.0",
+    "@injectivelabs/x402": "0.1.0-rc.1",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "node-cache": "^5.1.2",
+    "viem": "^2.20.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "concurrently": "^8.2.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.0"
+  }
+}
