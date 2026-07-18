@@ -3,324 +3,581 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Oracle — AI World Cup Analyst</title>
+  <title>Oracle XI — AI World Cup Analyst</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0a0a0f; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg:       #0c0e14;
+      --surface:  #13161e;
+      --surface2: #1a1e28;
+      --border:   #1e2433;
+      --accent:   #f97316;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --live:     #22c55e;
+      --thinking: #a78bfa;
+      --analysis: #38bdf8;
+      --win:      #22c55e;
+      --draw:     #facc15;
+      --loss:     #ef4444;
+      --r:        8px;
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* header */
     header {
-      background: linear-gradient(135deg, #1a0533 0%, #0d1f4a 100%);
-      border-bottom: 1px solid #2a1f6e;
-      padding: 24px 40px;
-      display: flex; align-items: center; gap: 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 24px; height: 56px; display: flex; align-items: center;
+      justify-content: space-between; position: sticky; top: 0; z-index: 100;
     }
-    header h1 { font-size: 1.8rem; color: #c084fc; letter-spacing: 1px; }
-    header p { color: #94a3b8; font-size: 0.9rem; margin-top: 4px; }
-    .badge {
-      background: #1e3a5f; color: #60a5fa; border: 1px solid #2563eb;
-      padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; margin-left: auto;
-    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: .05em; color: var(--accent); }
+    .logo span { color: var(--text); }
+    .hdr-right { display: flex; align-items: center; gap: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; transition: background .3s; }
+    .dot.on { background: var(--live); box-shadow: 0 0 6px var(--live); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+    #hdr-status { color: var(--muted); font-size: 12px; }
+    .chain-badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 11px; color: var(--muted); }
 
-    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    /* nav tabs */
+    .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; padding: 0 16px; overflow-x: auto; gap: 2px; }
+    .tab { background: none; border: none; cursor: pointer; padding: 14px 18px; font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
-    .tab {
-      padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
-      border: 1px solid #2a2a3e; background: #111120; color: #94a3b8; transition: all 0.2s;
-    }
-    .tab:hover { border-color: #7c3aed; color: #c084fc; }
-    .tab.active { background: #2d1b69; border-color: #7c3aed; color: #c084fc; }
-    .tab.premium { border-color: #d97706; color: #fbbf24; background: #1c1200; }
-    .tab.premium.active { background: #2d1f00; border-color: #f59e0b; }
-
+    /* main */
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
     .panel { display: none; }
     .panel.active { display: block; }
 
-    .card {
-      background: #111120; border: 1px solid #1e1e3a; border-radius: 12px;
-      padding: 24px; margin-bottom: 20px;
+    /* shared */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+    .ph { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+    .ph h2 { font-size: 18px; font-weight: 600; }
+    select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r); padding: 6px 10px; font-size: 13px; cursor: pointer; outline: none; }
+    .loading { color: var(--muted); padding: 32px; text-align: center; }
+    .empty { color: var(--muted); padding: 40px; text-align: center; font-size: 15px; }
+    .err { color: var(--loss); padding: 16px; background: #1a0a0a; border-radius: var(--r); }
+
+    /* match cards (live) */
+    .match-cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(300px,1fr)); gap: 12px; }
+    .mc { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
+    .mc.live { border-left: 3px solid var(--live); }
+    .mc .comp { font-size: 11px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
+    .mc .teams { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .mc .tn { flex: 1; font-weight: 600; font-size: 14px; }
+    .mc .tn.away { text-align: right; }
+    .mc .sc { font-size: 20px; font-weight: 700; color: var(--accent); min-width: 48px; text-align: center; }
+    .mc .min { font-size: 11px; color: var(--live); font-weight: 600; text-align: center; }
+    .refresh-lbl { font-size: 11px; color: var(--muted); }
+
+    /* data table */
+    .dt { width: 100%; border-collapse: collapse; }
+    .dt th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .dt td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .dt tr:last-child td { border-bottom: none; }
+    .dt tr:hover td { background: var(--surface2); }
+    .pos { color: var(--muted); font-size: 12px; }
+    .tnm { font-weight: 600; }
+    .fb { display: inline-block; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; text-align: center; line-height: 18px; margin-right: 2px; }
+    .fb-W { background: var(--win); color: #000; }
+    .fb-D { background: var(--draw); color: #000; }
+    .fb-L { background: var(--loss); color: #fff; }
+
+    /* team form search */
+    .fs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .fs input { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r); padding: 8px 12px; font-size: 14px; outline: none; }
+    .fs input:focus { border-color: var(--accent); }
+    .btn-sec { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r); padding: 8px 16px; font-size: 13px; cursor: pointer; }
+    .btn-sec:hover { border-color: var(--accent); color: var(--accent); }
+    .out-W { color: var(--win); font-weight: 700; }
+    .out-D { color: var(--draw); font-weight: 700; }
+    .out-L { color: var(--loss); font-weight: 700; }
+
+    /* predict form */
+    .pf { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 20px; }
+    .pi { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .pi input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--r); padding: 10px 14px; font-size: 14px; outline: none; width: 100%; }
+    .pi input:focus { border-color: var(--accent); }
+    .pi input::placeholder { color: var(--muted); }
+    .tier-row { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+    .to { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .to input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; }
+    .tp { font-size: 11px; color: var(--muted); margin-left: 4px; }
+    .btn-pred { background: var(--accent); border: none; color: #fff; border-radius: var(--r); padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: opacity .15s; }
+    .btn-pred:hover { opacity: .9; }
+    .btn-pred:disabled { opacity: .5; cursor: not-allowed; }
+    .demo-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; }
+    .demo-note a { color: var(--accent); text-decoration: none; }
+
+    /* predict output */
+    .po { display: none; }
+    .po.vis { display: block; }
+
+    .thk { background: #1a1428; border: 1px solid #3d2a6b; border-radius: var(--r); padding: 14px; margin-bottom: 14px; }
+    .thk-hdr { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .thk-lbl { color: var(--thinking); font-size: 13px; font-weight: 600; flex: 1; }
+    .thk-tog { color: var(--muted); font-size: 11px; }
+    .thk-body { margin-top: 10px; max-height: 160px; overflow-y: auto; font-size: 12px; color: #c4b5fd; line-height: 1.6; white-space: pre-wrap; display: none; }
+    .thk-body.vis { display: block; }
+
+    .anl { background: #0d1a24; border: 1px solid #1a3a4a; border-radius: var(--r); padding: 14px; margin-bottom: 14px; }
+    .anl-lbl { font-size: 11px; color: var(--analysis); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; font-weight: 600; }
+    .anl-txt { font-size: 13px; line-height: 1.7; color: var(--text); white-space: pre-wrap; }
+    .cur { display: inline-block; width: 2px; height: 14px; background: var(--analysis); animation: blink .7s infinite; vertical-align: middle; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+    /* prediction card */
+    .pcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; display: none; }
+    .pcard.vis { display: block; animation: fadeIn .4s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none} }
+    .pcard-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
+    .pcard-title { font-size: 18px; font-weight: 700; }
+    .cbadge { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid; }
+    .c-high { border-color: var(--live); color: var(--live); }
+    .c-medium { border-color: var(--draw); color: var(--draw); }
+    .c-low { border-color: var(--muted); color: var(--muted); }
+    .psec { margin-bottom: 20px; }
+    .psec h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .prow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .plbl { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+    .pbwrap { flex: 1; background: var(--surface2); border-radius: 3px; height: 8px; overflow: hidden; }
+    .pb { height: 100%; border-radius: 3px; transition: width .6s ease; width: 0; }
+    .pb-h { background: var(--accent); }
+    .pb-d { background: var(--draw); }
+    .pb-a { background: var(--analysis); }
+    .ppct { width: 36px; text-align: right; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+    .pscore { font-size: 28px; font-weight: 800; text-align: center; color: var(--accent); margin: 16px 0; }
+    .fsec h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .factor { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+    .factor::before { content: '→'; color: var(--accent); flex-shrink: 0; }
+    .factor:last-child { border-bottom: none; }
+    .rec { margin-top: 16px; padding: 12px 16px; background: var(--surface2); border-left: 3px solid var(--accent); border-radius: 0 var(--r) var(--r) 0; font-size: 13px; font-style: italic; line-height: 1.5; }
+    .pmeta { margin-top: 12px; font-size: 11px; color: var(--muted); text-align: right; }
+
+    @media (max-width: 600px) {
+      .pi { grid-template-columns: 1fr; }
+      .pcard-title { font-size: 15px; }
     }
-    .card h2 { color: #c084fc; margin-bottom: 16px; font-size: 1.1rem; }
-
-    .form-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    input, select {
-      background: #0d0d1a; border: 1px solid #2a2a4e; color: #e0e0e0;
-      padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; flex: 1; min-width: 140px;
-    }
-    input:focus, select:focus { outline: none; border-color: #7c3aed; }
-    button {
-      padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer;
-      font-size: 0.9rem; font-weight: 600; transition: all 0.2s;
-    }
-    .btn-primary { background: #7c3aed; color: white; }
-    .btn-primary:hover { background: #6d28d9; }
-    .btn-primary:disabled { background: #3b2070; color: #6b7280; cursor: not-allowed; }
-    .btn-gold { background: #d97706; color: white; }
-    .btn-gold:hover { background: #b45309; }
-    .btn-gold:disabled { background: #5a3500; color: #6b7280; cursor: not-allowed; }
-
-    .result {
-      background: #0d0d1a; border: 1px solid #1e1e3a; border-radius: 8px;
-      padding: 16px; margin-top: 16px; font-size: 0.85rem; line-height: 1.7;
-      white-space: pre-wrap; color: #cbd5e1; min-height: 60px;
-    }
-    .result.error { border-color: #7f1d1d; color: #fca5a5; }
-
-    table { width: 100%; border-collapse: collapse; }
-    th { color: #7c3aed; text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e1e3a; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    td { padding: 10px 12px; border-bottom: 1px solid #111130; font-size: 0.85rem; color: #cbd5e1; }
-    tr:hover td { background: #13132a; }
-    .pos { color: #7c3aed; font-weight: 700; }
-    .pts { color: #c084fc; font-weight: 700; }
-    .form-badge { display: inline-block; padding: 1px 5px; border-radius: 3px; margin: 0 1px; font-size: 0.7rem; font-weight: 700; }
-    .W { background: #14532d; color: #4ade80; }
-    .D { background: #1c2a3a; color: #94a3b8; }
-    .L { background: #7f1d1d; color: #fca5a5; }
-
-    .fixture-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #111130; }
-    .fixture-date { color: #6b7280; font-size: 0.75rem; width: 90px; }
-    .fixture-teams { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .team-name { flex: 1; }
-    .home { text-align: right; }
-    .score { color: #c084fc; font-weight: 700; font-size: 1rem; min-width: 50px; text-align: center; }
-    .status-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; }
-    .SCHEDULED { background: #1e3a5f; color: #60a5fa; }
-    .FINISHED { background: #14532d; color: #4ade80; }
-    .IN_PLAY { background: #7f1d1d; color: #f87171; }
-
-    .prediction-card { background: #0d0d1a; border: 1px solid #2d1b69; border-radius: 12px; padding: 20px; margin-top: 16px; }
-    .prediction-title { color: #c084fc; font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
-    .prob-bars { display: flex; gap: 4px; height: 32px; border-radius: 8px; overflow: hidden; margin: 12px 0; }
-    .prob-bar { display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; transition: width 0.6s ease; }
-    .prob-home { background: #7c3aed; color: white; }
-    .prob-draw { background: #374151; color: #d1d5db; }
-    .prob-away { background: #1d4ed8; color: white; }
-    .factors { margin-top: 12px; }
-    .factor { padding: 6px 0; border-bottom: 1px solid #1e1e3a; color: #94a3b8; font-size: 0.85rem; }
-    .factor::before { content: "→ "; color: #7c3aed; }
-    .reasoning { margin-top: 12px; color: #94a3b8; font-size: 0.85rem; line-height: 1.7; }
-    .recommendation { margin-top: 12px; padding: 12px; background: #1a0d3a; border-left: 3px solid #7c3aed; border-radius: 0 8px 8px 0; color: #c084fc; font-weight: 600; }
-    .payment-note { background: #1c1200; border: 1px solid #d97706; border-radius: 8px; padding: 12px 16px; color: #fbbf24; font-size: 0.82rem; margin-top: 12px; }
-
-    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .chain-info { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
-    .chain-pill { background: #111130; border: 1px solid #2a2a4e; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; color: #6b7280; }
-    .chain-pill span { color: #c084fc; }
   </style>
 </head>
 <body>
 
 <header>
-  <div>
-    <h1>⚡ The Oracle</h1>
-    <p>AI World Cup Analyst · Powered by Injective x402</p>
+  <div class="logo">⚽ ORACLE <span>XI</span></div>
+  <div class="hdr-right">
+    <span class="dot" id="dot"></span>
+    <span id="hdr-status">Connecting…</span>
+    <span class="chain-badge">⛓ Injective</span>
   </div>
-  <div class="badge">Injective Global Cup 2026</div>
 </header>
 
+<nav class="tabs">
+  <button class="tab active" data-tab="live">🔴 Live</button>
+  <button class="tab" data-tab="fixtures">📅 Fixtures</button>
+  <button class="tab" data-tab="standings">🏆 Standings</button>
+  <button class="tab" data-tab="scorers">⚽ Scorers</button>
+  <button class="tab" data-tab="form">📊 Team Form</button>
+  <button class="tab" data-tab="predict">🔮 Predict</button>
+</nav>
+
 <main>
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('fixtures')">Fixtures</div>
-    <div class="tab" onclick="switchTab('standings')">Standings</div>
-    <div class="tab premium" onclick="switchTab('predict')">⚡ Predict (x402)</div>
+
+  <!-- Live -->
+  <div id="panel-live" class="panel active">
+    <div class="ph">
+      <h2>Live Scores</h2>
+      <span class="refresh-lbl" id="live-refresh"></span>
+    </div>
+    <div id="live-content"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- FIXTURES -->
-  <div class="panel active" id="panel-fixtures">
-    <div class="card">
-      <h2>Match Fixtures</h2>
-      <div class="form-row">
-        <select id="fix-competition">
-          <option value="PL">Premier League</option>
-          <option value="WC">World Cup</option>
-          <option value="CL">Champions League</option>
-          <option value="BL1">Bundesliga</option>
-          <option value="PD">La Liga</option>
-          <option value="SA">Serie A</option>
-          <option value="FL1">Ligue 1</option>
-        </select>
-        <button class="btn-primary" onclick="loadFixtures()">Load Fixtures</button>
-      </div>
-      <div id="fixtures-result"></div>
+  <!-- Fixtures -->
+  <div id="panel-fixtures" class="panel">
+    <div class="ph">
+      <h2>Fixtures</h2>
+      <select id="fix-comp" onchange="loadFixtures()">
+        <option value="WC">World Cup 2026</option>
+        <option value="PL">Premier League</option>
+        <option value="CL">Champions League</option>
+        <option value="BL1">Bundesliga</option>
+        <option value="PD">La Liga</option>
+        <option value="SA">Serie A</option>
+        <option value="FL1">Ligue 1</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div id="fix-content"><div class="loading">Loading…</div></div>
     </div>
   </div>
 
-  <!-- STANDINGS -->
-  <div class="panel" id="panel-standings">
-    <div class="card">
-      <h2>League Standings</h2>
-      <div class="form-row">
-        <select id="std-competition">
-          <option value="PL">Premier League</option>
-          <option value="WC">World Cup</option>
-          <option value="CL">Champions League</option>
-          <option value="BL1">Bundesliga</option>
-          <option value="PD">La Liga</option>
-          <option value="SA">Serie A</option>
-          <option value="FL1">Ligue 1</option>
-        </select>
-        <button class="btn-primary" onclick="loadStandings()">Load Standings</button>
-      </div>
-      <div id="standings-result"></div>
+  <!-- Standings -->
+  <div id="panel-standings" class="panel">
+    <div class="ph">
+      <h2>Standings</h2>
+      <select id="std-comp" onchange="loadStandings()">
+        <option value="WC">World Cup 2026</option>
+        <option value="PL">Premier League</option>
+        <option value="CL">Champions League</option>
+        <option value="BL1">Bundesliga</option>
+        <option value="PD">La Liga</option>
+        <option value="SA">Serie A</option>
+        <option value="FL1">Ligue 1</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div id="std-content"><div class="loading">Loading…</div></div>
     </div>
   </div>
 
-  <!-- PREDICT -->
-  <div class="panel" id="panel-predict">
-    <div class="card">
-      <h2>⚡ AI Match Prediction</h2>
-      <div class="payment-note">
-        🔐 This tool is gated by <strong>x402</strong> — requires 0.01 USDC payment on Injective EVM Testnet (chain 1439).<br>
-        Get testnet USDC at <strong>faucet.circle.com</strong> → select Injective Testnet.
-      </div>
-      <div class="form-row" style="margin-top:16px">
-        <input id="home-team" placeholder="Home team, e.g. Arsenal" />
-        <input id="away-team" placeholder="Away team, e.g. Chelsea" />
-      </div>
-      <div class="form-row">
-        <input id="competition" placeholder="Competition, e.g. Premier League" value="Premier League" />
-        <button class="btn-gold" id="predict-btn" onclick="getPrediction()">Get Prediction</button>
-      </div>
-      <div id="predict-result"></div>
-      <div class="chain-info" style="margin-top:16px">
-        <div class="chain-pill">Chain: <span>Injective EVM Testnet</span></div>
-        <div class="chain-pill">Token: <span>USDC (EIP-3009)</span></div>
-        <div class="chain-pill">Price: <span>0.01 USDC</span></div>
-        <div class="chain-pill">Network: <span>eip155:1439</span></div>
-      </div>
+  <!-- Scorers -->
+  <div id="panel-scorers" class="panel">
+    <div class="ph">
+      <h2>Top Scorers</h2>
+      <select id="scr-comp" onchange="loadScorers()">
+        <option value="WC">World Cup 2026</option>
+        <option value="PL">Premier League</option>
+        <option value="CL">Champions League</option>
+        <option value="BL1">Bundesliga</option>
+        <option value="PD">La Liga</option>
+        <option value="SA">Serie A</option>
+        <option value="FL1">Ligue 1</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div id="scr-content"><div class="loading">Loading…</div></div>
     </div>
   </div>
+
+  <!-- Team Form -->
+  <div id="panel-form" class="panel">
+    <div class="ph"><h2>Team Form</h2></div>
+    <div class="fs">
+      <input id="form-team" type="text" placeholder="Team name (e.g. England)" onkeydown="if(event.key==='Enter')loadForm()" />
+      <button class="btn-sec" onclick="loadForm()">Search</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div id="form-content"><div class="empty">Enter a team name to see recent results.</div></div>
+    </div>
+  </div>
+
+  <!-- Predict -->
+  <div id="panel-predict" class="panel">
+    <div class="ph"><h2>Ask The Oracle</h2></div>
+
+    <div class="pf">
+      <div class="pi">
+        <input id="home-team" type="text" placeholder="Home team (e.g. England)" />
+        <input id="away-team" type="text" placeholder="Away team (e.g. Germany)" />
+      </div>
+      <div class="tier-row">
+        <label class="to">
+          <input type="radio" name="tier" value="quick" checked />
+          <span>Quick <span class="tp">Haiku 4.5 · 0.003 USDC</span></span>
+        </label>
+        <label class="to">
+          <input type="radio" name="tier" value="pro" />
+          <span>Pro <span class="tp">Opus 4.8 + thinking · 0.01 USDC</span></span>
+        </label>
+      </div>
+      <button class="btn-pred" id="pred-btn" onclick="startPrediction()">🔮 Ask The Oracle</button>
+      <p class="demo-note">Dashboard uses <code>DEMO_MODE</code> — no x402 payment required.
+        Use the <a href="https://github.com/ankit79600/Oracle-XI" target="_blank">MCP server</a> for on-chain predictions.</p>
+    </div>
+
+    <div class="po" id="pred-out">
+      <div class="thk" id="thk-box" style="display:none">
+        <div class="thk-hdr" onclick="toggleThinking()">
+          <span>🧠</span>
+          <span class="thk-lbl" id="thk-lbl">Oracle is thinking…</span>
+          <span class="thk-tog" id="thk-tog">▼ show</span>
+        </div>
+        <div class="thk-body" id="thk-body"></div>
+      </div>
+      <div class="anl" id="anl-box" style="display:none">
+        <div class="anl-lbl">Analysis</div>
+        <div class="anl-txt" id="anl-txt"></div>
+      </div>
+      <div class="pcard" id="pcard"></div>
+    </div>
+  </div>
+
 </main>
 
 <script>
-  const API = 'http://localhost:3002';
+  // ── status ──────────────────────────────────────────────────────────────────
+  (async () => {
+    try {
+      await fetch('/health');
+      document.getElementById('dot').classList.add('on');
+      document.getElementById('hdr-status').textContent = 'API online';
+    } catch {
+      document.getElementById('hdr-status').textContent = 'API offline';
+    }
+  })();
 
-  function switchTab(name) {
-    document.querySelectorAll('.tab').forEach((t, i) => {
-      const names = ['fixtures','standings','predict'];
-      t.classList.toggle('active', names[i] === name);
-    });
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('panel-' + name).classList.add('active');
+  // ── tab switching ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const n = t.dataset.tab;
+    document.getElementById('panel-' + n).classList.add('active');
+    ({ live: loadLive, fixtures: loadFixtures, standings: loadStandings, scorers: loadScorers }[n] || (() => {}))();
+  }));
+
+  // ── helpers ─────────────────────────────────────────────────────────────────
+  async function apiFetch(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+    return r.json();
   }
 
+  // ── live ────────────────────────────────────────────────────────────────────
+  let liveTimer;
+  async function loadLive() {
+    clearTimeout(liveTimer);
+    const el = document.getElementById('live-content');
+    try {
+      const { fixtures, count } = await apiFetch('/live');
+      document.getElementById('live-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      el.innerHTML = count === 0
+        ? '<div class="empty">No matches currently in play.</div>'
+        : '<div class="match-cards">' + fixtures.map(f => `
+            <div class="mc live">
+              <div class="comp">${f.competition.name}</div>
+              <div class="teams">
+                <span class="tn">${f.homeTeam.name}</span>
+                <span class="sc">${f.score.fullTime.home ?? 0}–${f.score.fullTime.away ?? 0}</span>
+                <span class="tn away">${f.awayTeam.name}</span>
+              </div>
+              <div class="min">${f.minute ? f.minute + "'" : 'LIVE'}</div>
+            </div>`).join('') + '</div>';
+    } catch (e) {
+      el.innerHTML = `<div class="err">${e.message}</div>`;
+    }
+    liveTimer = setTimeout(loadLive, 30_000);
+  }
+  loadLive();
+
+  // ── fixtures ────────────────────────────────────────────────────────────────
   async function loadFixtures() {
-    const comp = document.getElementById('fix-competition').value;
-    const el = document.getElementById('fixtures-result');
-    el.innerHTML = '<div class="result"><span class="spinner"></span>Loading fixtures...</div>';
+    const comp = document.getElementById('fix-comp').value;
+    const el = document.getElementById('fix-content');
+    el.innerHTML = '<div class="loading">Loading…</div>';
     try {
-      const r = await fetch(`${API}/fixtures?competition=${comp}`);
-      const data = await r.json();
-      const matches = data.fixtures || [];
-      if (!matches.length) { el.innerHTML = '<div class="result">No fixtures found.</div>'; return; }
-      el.innerHTML = matches.slice(0,20).map(m => `
-        <div class="fixture-row">
-          <div class="fixture-date">${m.utcDate.slice(0,10)}</div>
-          <div class="fixture-teams">
-            <div class="team-name home">${m.homeTeam.name}</div>
-            <div class="score">
-              ${m.status === 'FINISHED'
-                ? `${m.score.fullTime.home} - ${m.score.fullTime.away}`
-                : `<span class="status-badge ${m.status}">${m.status}</span>`}
-            </div>
-            <div class="team-name">${m.awayTeam.name}</div>
-          </div>
-        </div>`).join('');
-    } catch(e) {
-      el.innerHTML = `<div class="result error">Error: ${e.message}\nMake sure the API server is running (npm run start:api)</div>`;
-    }
+      const { fixtures } = await apiFetch('/fixtures?competition=' + comp);
+      if (!fixtures.length) { el.innerHTML = '<div class="empty">No fixtures found.</div>'; return; }
+      el.innerHTML = `<table class="dt">
+        <thead><tr><th>Date</th><th>Home</th><th></th><th>Away</th><th>Status</th></tr></thead>
+        <tbody>${fixtures.slice(0,30).map(f => {
+          const sc = f.status === 'FINISHED'
+            ? `<b>${f.score.fullTime.home}–${f.score.fullTime.away}</b>`
+            : f.status === 'IN_PLAY'
+            ? `<span style="color:var(--live)">${f.score.fullTime.home ?? 0}–${f.score.fullTime.away ?? 0}</span>`
+            : 'vs';
+          return `<tr>
+            <td style="color:var(--muted);font-size:12px">${f.utcDate.slice(0,10)}</td>
+            <td class="tnm">${f.homeTeam.name}</td>
+            <td style="text-align:center">${sc}</td>
+            <td class="tnm">${f.awayTeam.name}</td>
+            <td style="font-size:11px;color:var(--muted)">${f.status}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+    } catch (e) { el.innerHTML = `<div class="err">${e.message}</div>`; }
   }
 
+  // ── standings ────────────────────────────────────────────────────────────────
   async function loadStandings() {
-    const comp = document.getElementById('std-competition').value;
-    const el = document.getElementById('standings-result');
-    el.innerHTML = '<div class="result"><span class="spinner"></span>Loading standings...</div>';
+    const comp = document.getElementById('std-comp').value;
+    const el = document.getElementById('std-content');
+    el.innerHTML = '<div class="loading">Loading…</div>';
     try {
-      const r = await fetch(`${API}/standings?competition=${comp}`);
-      const data = await r.json();
-      const rows = data.standings || [];
-      if (!rows.length) { el.innerHTML = '<div class="result">No standings found.</div>'; return; }
-      el.innerHTML = `<table>
-        <thead><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th><th>Form</th></tr></thead>
-        <tbody>${rows.map(s => `<tr>
-          <td class="pos">${s.position}</td>
-          <td>${s.team.name}</td>
-          <td>${s.playedGames}</td>
-          <td>${s.won}</td>
-          <td>${s.draw}</td>
-          <td>${s.lost}</td>
-          <td>${s.goalDifference > 0 ? '+' : ''}${s.goalDifference}</td>
-          <td class="pts">${s.points}</td>
-          <td>${(s.form || '').split(',').map(f => f ? `<span class="form-badge ${f}">${f}</span>` : '').join('')}</td>
-        </tr>`).join('')}</tbody>
-      </table>`;
-    } catch(e) {
-      el.innerHTML = `<div class="result error">Error: ${e.message}</div>`;
-    }
+      const { standings } = await apiFetch('/standings?competition=' + comp);
+      if (!standings.length) { el.innerHTML = '<div class="empty">No standings found.</div>'; return; }
+      el.innerHTML = `<table class="dt">
+        <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th><th>Form</th></tr></thead>
+        <tbody>${standings.map(s => {
+          const form = (s.form || '').split(',').map(r => r ? `<span class="fb fb-${r}">${r}</span>` : '').join('');
+          return `<tr>
+            <td class="pos">${s.position}</td>
+            <td class="tnm">${s.team.name}</td>
+            <td>${s.playedGames}</td><td>${s.won}</td><td>${s.draw}</td><td>${s.lost}</td>
+            <td>${s.goalDifference >= 0 ? '+' : ''}${s.goalDifference}</td>
+            <td><b>${s.points}</b></td>
+            <td>${form}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+    } catch (e) { el.innerHTML = `<div class="err">${e.message}</div>`; }
   }
 
-  async function getPrediction() {
+  // ── scorers ──────────────────────────────────────────────────────────────────
+  async function loadScorers() {
+    const comp = document.getElementById('scr-comp').value;
+    const el = document.getElementById('scr-content');
+    el.innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const { scorers } = await apiFetch('/scorers/' + comp);
+      if (!scorers.length) { el.innerHTML = '<div class="empty">No scorer data.</div>'; return; }
+      el.innerHTML = `<table class="dt">
+        <thead><tr><th>#</th><th>Player</th><th>Team</th><th>Goals</th><th>Assists</th><th>Pens</th></tr></thead>
+        <tbody>${scorers.map(s => `<tr>
+          <td style="color:var(--accent);font-weight:700">${s.position}</td>
+          <td class="tnm">${s.player.name}</td>
+          <td style="color:var(--muted)">${s.team.name}</td>
+          <td><b>${s.goals}</b></td>
+          <td style="color:var(--muted)">${s.assists ?? 0}</td>
+          <td style="color:var(--muted)">${s.penalties ?? 0}</td>
+        </tr>`).join('')}</tbody></table>`;
+    } catch (e) { el.innerHTML = `<div class="err">${e.message}</div>`; }
+  }
+
+  // ── team form ────────────────────────────────────────────────────────────────
+  async function loadForm() {
+    const team = document.getElementById('form-team').value.trim();
+    if (!team) return;
+    const el = document.getElementById('form-content');
+    el.innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const { fixtures } = await apiFetch('/team-form?team=' + encodeURIComponent(team) + '&limit=8');
+      if (!fixtures.length) { el.innerHTML = `<div class="empty">No results found for "${team}".</div>`; return; }
+      el.innerHTML = `<table class="dt">
+        <thead><tr><th>Date</th><th>H/A</th><th>Result</th><th>Score</th><th>Opponent</th><th>Competition</th></tr></thead>
+        <tbody>${fixtures.map(f => {
+          const isHome = f.homeTeam.name.toLowerCase().includes(team.toLowerCase());
+          const tG = isHome ? (f.score.fullTime.home ?? 0) : (f.score.fullTime.away ?? 0);
+          const oG = isHome ? (f.score.fullTime.away ?? 0) : (f.score.fullTime.home ?? 0);
+          const opp = isHome ? f.awayTeam.name : f.homeTeam.name;
+          const r = tG > oG ? 'W' : tG < oG ? 'L' : 'D';
+          return `<tr>
+            <td style="color:var(--muted);font-size:12px">${f.utcDate.slice(0,10)}</td>
+            <td style="color:var(--muted)">${isHome ? 'H' : 'A'}</td>
+            <td class="out-${r}">${r}</td>
+            <td><b>${tG}–${oG}</b></td>
+            <td>${opp}</td>
+            <td style="font-size:11px;color:var(--muted)">${f.competition.name}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+    } catch (e) { el.innerHTML = `<div class="err">${e.message}</div>`; }
+  }
+
+  // ── prediction ───────────────────────────────────────────────────────────────
+  let thinkingWords = 0, thinkingOpen = false;
+
+  function toggleThinking() {
+    thinkingOpen = !thinkingOpen;
+    document.getElementById('thk-body').classList.toggle('vis', thinkingOpen);
+    document.getElementById('thk-tog').textContent = thinkingOpen ? '▲ hide' : '▼ show';
+  }
+
+  function resetPredOutput() {
+    thinkingWords = 0; thinkingOpen = false;
+    document.getElementById('pred-out').classList.add('vis');
+    const tb = document.getElementById('thk-body');
+    tb.textContent = ''; tb.classList.remove('vis');
+    document.getElementById('thk-box').style.display = 'none';
+    document.getElementById('thk-lbl').textContent = 'Oracle is thinking…';
+    document.getElementById('thk-tog').textContent = '▼ show';
+    document.getElementById('anl-box').style.display = 'none';
+    document.getElementById('anl-txt').textContent = '';
+    const pc = document.getElementById('pcard');
+    pc.classList.remove('vis'); pc.innerHTML = '';
+  }
+
+  function showPredCard(p, meta) {
+    const confCls = { high: 'c-high', medium: 'c-medium', low: 'c-low' }[p.confidence] || 'c-low';
+    const el = document.getElementById('pcard');
+    el.innerHTML = `
+      <div class="pcard-hdr">
+        <div class="pcard-title">${meta.match}</div>
+        <span class="cbadge ${confCls}">${p.confidence.toUpperCase()} CONFIDENCE</span>
+      </div>
+      <div class="psec">
+        <h4>Win Probabilities</h4>
+        <div class="prow"><span class="plbl">${meta.home}</span><div class="pbwrap"><div class="pb pb-h" id="pb-h"></div></div><span class="ppct">${p.homeWinProbability}%</span></div>
+        <div class="prow"><span class="plbl">Draw</span><div class="pbwrap"><div class="pb pb-d" id="pb-d"></div></div><span class="ppct">${p.drawProbability}%</span></div>
+        <div class="prow"><span class="plbl">${meta.away}</span><div class="pbwrap"><div class="pb pb-a" id="pb-a"></div></div><span class="ppct">${p.awayWinProbability}%</span></div>
+      </div>
+      <div class="pscore">${meta.home} ${p.predictedScore} ${meta.away}</div>
+      <div class="fsec">
+        <h4>Key Factors</h4>
+        ${p.keyFactors.map(f => `<div class="factor">${f}</div>`).join('')}
+      </div>
+      <div class="rec">${p.recommendation}</div>
+      <div class="pmeta">Model: ${meta.model} · Data: ${meta.dataSource}</div>
+    `;
+    el.classList.add('vis');
+    requestAnimationFrame(() => setTimeout(() => {
+      document.getElementById('pb-h').style.width = p.homeWinProbability + '%';
+      document.getElementById('pb-d').style.width = p.drawProbability + '%';
+      document.getElementById('pb-a').style.width = p.awayWinProbability + '%';
+    }, 50));
+  }
+
+  async function startPrediction() {
     const home = document.getElementById('home-team').value.trim();
     const away = document.getElementById('away-team').value.trim();
-    const comp = document.getElementById('competition').value.trim();
-    const btn = document.getElementById('predict-btn');
-    const el = document.getElementById('predict-result');
+    const tier = document.querySelector('input[name="tier"]:checked').value;
+    if (!home || !away) { alert('Please enter both team names.'); return; }
 
-    if (!home || !away) { el.innerHTML = '<div class="result error">Enter both team names.</div>'; return; }
+    const btn = document.getElementById('pred-btn');
+    btn.disabled = true; btn.textContent = 'Consulting The Oracle…';
+    resetPredOutput();
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Paying via x402...';
-    el.innerHTML = '<div class="result"><span class="spinner"></span>Initiating x402 payment on Injective EVM testnet...</div>';
+    const params = new URLSearchParams({ home, away, competition: 'FIFA World Cup 2026' });
 
-    try {
-      const r = await fetch(`${API}/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&competition=${encodeURIComponent(comp)}`);
-      if (r.status === 402) {
-        const data = await r.json();
-        el.innerHTML = `<div class="result error">
-⚠️  Payment Required (HTTP 402)
-
-The x402 gate is active. To get a prediction, your wallet needs testnet USDC on Injective.
-
-Network: ${data.accepts?.[0]?.network}
-Token:   ${data.accepts?.[0]?.asset}
-Amount:  ${data.accepts?.[0]?.amount} (0.01 USDC)
-Pay to:  ${data.accepts?.[0]?.payTo}
-
-→ Get testnet USDC at faucet.circle.com (select Injective Testnet)
-→ Then call via the MCP server which handles payment automatically</div>`;
-        return;
+    if (tier === 'quick') {
+      document.getElementById('anl-box').style.display = 'block';
+      document.getElementById('anl-txt').textContent = 'Consulting Haiku 4.5…';
+      try {
+        const data = await apiFetch('/predict/demo?' + params + '&tier=quick');
+        document.getElementById('anl-txt').textContent = data.prediction.reasoning;
+        showPredCard(data.prediction, { home, away, match: data.match, model: data.model, dataSource: data.dataSource });
+      } catch (e) {
+        document.getElementById('anl-txt').textContent = 'Error: ' + e.message;
+      } finally {
+        btn.disabled = false; btn.textContent = '🔮 Ask The Oracle';
       }
-      const data = await r.json();
-      const p = data.prediction;
-      el.innerHTML = `
-        <div class="prediction-card">
-          <div class="prediction-title">${home} vs ${away}</div>
-          <div style="color:#94a3b8;font-size:0.8rem">Confidence: <strong style="color:#c084fc">${(p.confidence||'').toUpperCase()}</strong> · Predicted: <strong style="color:#c084fc">${p.predictedScore}</strong></div>
-          <div class="prob-bars">
-            <div class="prob-bar prob-home" style="width:${p.homeWinProbability}%">${p.homeWinProbability}%</div>
-            <div class="prob-bar prob-draw" style="width:${p.drawProbability}%">${p.drawProbability}%</div>
-            <div class="prob-bar prob-away" style="width:${p.awayWinProbability}%">${p.awayWinProbability}%</div>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#6b7280;margin-bottom:12px">
-            <span>${home}</span><span>Draw</span><span>${away}</span>
-          </div>
-          <div class="factors">${(p.keyFactors||[]).map(f => `<div class="factor">${f}</div>`).join('')}</div>
-          <div class="reasoning">${p.reasoning}</div>
-          <div class="recommendation">${p.recommendation}</div>
-          <div style="font-size:0.75rem;color:#4b5563;margin-top:12px">Data: ${data.dataSource} · Chain: ${data.chain}</div>
-        </div>`;
-    } catch(e) {
-      el.innerHTML = `<div class="result error">Error: ${e.message}\nMake sure the API server is running (npm run start:api)</div>`;
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Get Prediction';
+      return;
     }
-  }
 
-  // Auto-load fixtures on start
-  loadFixtures();
+    // Pro: SSE stream
+    document.getElementById('thk-box').style.display = 'block';
+    document.getElementById('anl-box').style.display = 'block';
+    const anlEl = document.getElementById('anl-txt');
+    const cur = document.createElement('span');
+    cur.className = 'cur';
+    anlEl.appendChild(cur);
+
+    const es = new EventSource('/predict/demo/stream?' + params);
+
+    es.addEventListener('thinking', e => {
+      const { text } = JSON.parse(e.data);
+      document.getElementById('thk-body').textContent += text;
+      thinkingWords += text.split(/\s+/).filter(Boolean).length;
+      document.getElementById('thk-lbl').textContent = `Oracle is thinking… (${thinkingWords} words)`;
+    });
+    es.addEventListener('token', e => {
+      anlEl.insertBefore(document.createTextNode(JSON.parse(e.data).text), cur);
+    });
+    es.addEventListener('prediction', e => {
+      const payload = JSON.parse(e.data);
+      cur.remove();
+      document.getElementById('thk-lbl').textContent = `Reasoned for ~${thinkingWords} words`;
+      showPredCard(payload.data, { home, away, match: payload.match, model: payload.model, dataSource: payload.dataSource });
+    });
+    es.addEventListener('done', () => {
+      es.close(); btn.disabled = false; btn.textContent = '🔮 Ask The Oracle';
+    });
+    es.addEventListener('error', e => {
+      es.close();
+      try { anlEl.textContent = 'Error: ' + JSON.parse(e.data || '{}').message; }
+      catch { anlEl.textContent = 'Connection error — is the server running with DEMO_MODE=true?'; }
+      cur.remove(); btn.disabled = false; btn.textContent = '🔮 Ask The Oracle';
+    });
+  }
 </script>
 </body>
 </html>

@@ -16,13 +16,16 @@ const FREE_COMPETITIONS = [
 
 // Serialising promise chain: each throttle() appends to the chain so concurrent
 // callers queue up rather than all reading lastCallMs simultaneously.
-class RateLimiter {
+// intervalMs is configurable so unit tests can run with a short interval.
+export class RateLimiter {
   private lastCallMs = 0;
   private chain: Promise<void> = Promise.resolve();
 
+  constructor(private readonly intervalMs: number = config.football.rateLimitMs) {}
+
   throttle(): Promise<void> {
     const next = this.chain.then(() => {
-      const wait = Math.max(0, this.lastCallMs + config.football.rateLimitMs - Date.now());
+      const wait = Math.max(0, this.lastCallMs + this.intervalMs - Date.now());
       this.lastCallMs = Date.now() + wait;
       return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : undefined;
     });

@@ -15,6 +15,8 @@
  */
 
 import "dotenv/config";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { injectivePaymentMiddleware } from "@injectivelabs/x402/middleware";
 import { decodePaymentSignatureHeader } from "@injectivelabs/x402/client";
@@ -33,6 +35,7 @@ const football: FootballClient = config.football.useMock
 
 const app = express();
 app.use(express.json());
+app.use(express.static(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public")));
 
 // ── payment middleware factory ────────────────────────────────────────────────
 
@@ -361,12 +364,108 @@ app.get("/predict/stream", streamPaymentMiddleware, async (req, res) => {
   }
 });
 
+// ── demo endpoints (no x402 — for dashboard; requires DEMO_MODE=true) ────────
+
+app.get("/predict/demo", async (req, res) => {
+  if (!config.api.demoMode) {
+    res.status(403).json({
+      error: "Demo endpoint requires DEMO_MODE=true",
+      hint: "Use /predict or /predict/quick (x402-gated) for production, or set DEMO_MODE=true",
+    });
+    return;
+  }
+
+  const homeTeam = (req.query.home as string) || "";
+  const awayTeam = (req.query.away as string) || "";
+  const competition = (req.query.competition as string) || "FIFA World Cup 2026";
+  const tier = ((req.query.tier as string) === "quick" ? "quick" : "pro") as "quick" | "pro";
+
+  if (!homeTeam || !awayTeam) {
+    res.status(400).json({ error: "Missing ?home=&away= query params" });
+    return;
+  }
+
+  try {
+    const input = await gatherContext(homeTeam, awayTeam, competition);
+    const result = await predict(input, tier);
+    res.json({
+      tier,
+      model: tier === "pro" ? config.llm.proModel : config.llm.quickModel,
+      match: `${homeTeam} vs ${awayTeam}`,
+      competition,
+      prediction: result,
+      dataSource: config.football.useMock ? "mock" : "football-data.org",
+    });
+  } catch (e) {
+    console.error("[predict/demo]", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get("/predict/demo/stream", async (req, res) => {
+  if (!config.api.demoMode) {
+    res.status(403).json({
+      error: "Demo endpoint requires DEMO_MODE=true",
+      hint: "Use /predict/stream (x402-gated) for production use",
+    });
+    return;
+  }
+
+  const homeTeam = (req.query.home as string) || "";
+  const awayTeam = (req.query.away as string) || "";
+  const competition = (req.query.competition as string) || "FIFA World Cup 2026";
+
+  if (!homeTeam || !awayTeam) {
+    res.status(400).json({ error: "Missing ?home=&away= query params" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const emit = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const input = await gatherContext(homeTeam, awayTeam, competition);
+    for await (const chunk of streamPrediction(input)) {
+      if (chunk.type === "thinking") {
+        emit("thinking", { text: chunk.text });
+      } else if (chunk.type === "token") {
+        emit("token", { text: chunk.text });
+      } else if (chunk.type === "prediction") {
+        emit("prediction", {
+          data: chunk.data,
+          tier: "pro",
+          model: config.llm.proModel,
+          match: `${homeTeam} vs ${awayTeam}`,
+          competition,
+          dataSource: config.football.useMock ? "mock" : "football-data.org",
+        });
+      }
+    }
+    emit("done", {});
+  } catch (e) {
+    console.error("[predict/demo/stream]", e);
+    emit("error", { message: String(e) });
+  } finally {
+    res.end();
+  }
+});
+
 // ── start ─────────────────────────────────────────────────────────────────────
 
-app.listen(config.api.port, () => {
-  console.log(`Oracle API  →  http://localhost:${config.api.port}`);
-  console.log(`Quick tier  →  ${config.x402.priceQuick} USDC units (/predict/quick)`);
-  console.log(`Pro tier    →  ${config.x402.price} USDC units (/predict, /predict/stream)`);
-  console.log(`Recipient   →  ${config.x402.recipient}`);
-  console.log(`Mock data   →  ${config.football.useMock}`);
-});
+export { app };
+
+if (!process.env.VITEST) {
+  app.listen(config.api.port, () => {
+    console.log(`Oracle API  →  http://localhost:${config.api.port}`);
+    console.log(`Quick tier  →  ${config.x402.priceQuick} USDC units (/predict/quick)`);
+    console.log(`Pro tier    →  ${config.x402.price} USDC units (/predict, /predict/stream)`);
+    console.log(`Recipient   →  ${config.x402.recipient}`);
+    console.log(`Mock data   →  ${config.football.useMock}`);
+  });
+}
