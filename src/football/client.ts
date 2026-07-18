@@ -7,22 +7,27 @@ import type {
   HeadToHeadResult,
   Standing,
   CompetitionRef,
+  TopScorer,
 } from "./types.js";
 
-// football-data.org free tier: 10 req/min across these competitions
 const FREE_COMPETITIONS = [
-  "WC", "CL", "BL1", "DED", "BSA", "PD", "FL1", "ELC", "PPL", "EC", "SA", "PL"
+  "WC", "CL", "BL1", "DED", "BSA", "PD", "FL1", "ELC", "PPL", "EC", "SA", "PL",
 ];
 
+// Serialising promise chain: each throttle() appends to the chain so concurrent
+// callers queue up rather than all reading lastCallMs simultaneously.
 class RateLimiter {
-  private queue: Array<() => void> = [];
   private lastCallMs = 0;
+  private chain: Promise<void> = Promise.resolve();
 
-  async throttle(): Promise<void> {
-    const now = Date.now();
-    const wait = Math.max(0, this.lastCallMs + config.football.rateLimitMs - now);
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    this.lastCallMs = Date.now();
+  throttle(): Promise<void> {
+    const next = this.chain.then(() => {
+      const wait = Math.max(0, this.lastCallMs + config.football.rateLimitMs - Date.now());
+      this.lastCallMs = Date.now() + wait;
+      return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : undefined;
+    });
+    this.chain = next.then(() => undefined, () => undefined);
+    return next;
   }
 }
 
@@ -66,9 +71,65 @@ export class LiveFootballClient implements FootballClient {
   }
 
   async getHeadToHead(matchId: number, limit = 10): Promise<HeadToHeadResult> {
-    return this.get<HeadToHeadResult>(
-      `/matches/${matchId}/head2head?limit=${limit}`
+    return this.get<HeadToHeadResult>(`/matches/${matchId}/head2head?limit=${limit}`);
+  }
+
+  async getTopScorers(competitionCode: string): Promise<TopScorer[]> {
+    const raw = await this.get<{ scorers: TopScorer[] }>(
+      `/competitions/${competitionCode}/scorers?limit=10`
     );
+    return raw.scorers;
+  }
+
+  async getLiveScores(competitionCode?: string): Promise<Fixture[]> {
+    if (competitionCode) {
+      const raw = await this.get<{ matches: Fixture[] }>(
+        `/competitions/${competitionCode}/matches?status=IN_PLAY`
+      );
+      return raw.matches;
+    }
+
+    const live: Fixture[] = [];
+    for (const code of FREE_COMPETITIONS) {
+      try {
+        const raw = await this.get<{ matches: Fixture[] }>(
+          `/competitions/${code}/matches?status=IN_PLAY`
+        );
+        live.push(...raw.matches);
+      } catch {
+        // competition unavailable on free tier — skip
+      }
+    }
+    return live;
+  }
+
+  async getTeamForm(teamName: string, limit = 5): Promise<Fixture[]> {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const tn = normalize(teamName);
+    const results: Fixture[] = [];
+
+    for (const code of FREE_COMPETITIONS) {
+      if (results.length >= limit * 3) break;
+      try {
+        const raw = await this.get<{ matches: Fixture[] }>(
+          `/competitions/${code}/matches?status=FINISHED`
+        );
+        const teamMatches = raw.matches.filter(
+          (f) =>
+            normalize(f.homeTeam.name).includes(tn) ||
+            normalize(f.homeTeam.shortName).includes(tn) ||
+            normalize(f.awayTeam.name).includes(tn) ||
+            normalize(f.awayTeam.shortName).includes(tn)
+        );
+        results.push(...teamMatches);
+      } catch {
+        // skip unavailable
+      }
+    }
+
+    return results
+      .sort((a, b) => new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime())
+      .slice(0, limit);
   }
 
   async findMatch(homeTeam: string, awayTeam: string): Promise<Fixture | null> {

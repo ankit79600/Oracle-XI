@@ -4,7 +4,6 @@ function optional(name: string, fallback: string): string {
   return process.env[name] || fallback;
 }
 
-/** Ensure a hex key has the 0x prefix viem requires. */
 function hexKey(name: string): `0x${string}` {
   const v = process.env[name] || "";
   if (!v) return "" as `0x${string}`;
@@ -15,7 +14,7 @@ export const config = {
   football: {
     apiKey: optional("FOOTBALL_DATA_API_KEY", ""),
     useMock: process.env.USE_MOCK_DATA === "true",
-    rateLimitMs: 6_100, // 10 req/min → 1 per 6s; buffer to 6.1s
+    rateLimitMs: 6_100,
     cacheTtlSeconds: 300,
   },
   chain: {
@@ -23,29 +22,26 @@ export const config = {
     chainId: parseInt(optional("CHAIN_ID", "1439"), 10),
   },
   x402: {
-    // EIP-3009 USDC on Injective EVM testnet (Circle FiatTokenV2_2)
-    // USDT does NOT support EIP-3009 and cannot be used with @injectivelabs/x402
     tokenAddress: optional(
       "X402_TOKEN_ADDRESS",
       "0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d"
     ) as `0x${string}`,
-    price: optional("X402_PRICE", "10000"), // 0.01 USDC (6 decimals)
+    price: optional("X402_PRICE", "10000"),          // 0.01 USDC — pro tier
+    priceQuick: optional("X402_PRICE_QUICK", "3000"), // 0.003 USDC — quick tier
     recipient: optional("X402_RECIPIENT", "") as `0x${string}`,
-    // Facilitator key: submits transferWithAuthorization on-chain, pays INJ gas.
-    // Falls back to PRIVATE_KEY so you only need one key for demos.
     facilitatorKey: (hexKey("X402_FACILITATOR_KEY") || hexKey("PRIVATE_KEY")) as `0x${string}`,
     network: `eip155:${optional("CHAIN_ID", "1439")}` as "eip155:1439" | "eip155:1776",
   },
   llm: {
     anthropicApiKey: optional("ANTHROPIC_API_KEY", ""),
-    model: "claude-sonnet-4-6",
+    proModel: "claude-opus-4-8",       // extended thinking, deep analysis
+    quickModel: "claude-haiku-4-5-20251001", // fast, cheap, still structured via tool_use
   },
   api: {
     port: parseInt(optional("API_PORT", "3002"), 10),
     demoMode: process.env.DEMO_MODE === "true",
   },
   wallet: {
-    // Payer's private key — used by MCP server to sign EIP-3009 authorizations (no gas)
     privateKey: hexKey("PRIVATE_KEY"),
   },
 } as const;

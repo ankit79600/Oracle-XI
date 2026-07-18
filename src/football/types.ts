@@ -2,7 +2,7 @@ export interface Team {
   id: number;
   name: string;
   shortName: string;
-  tla: string; // three-letter abbreviation
+  tla: string;
   crest?: string;
 }
 
@@ -26,6 +26,7 @@ export interface Fixture {
     name: string;
   };
   matchday?: number;
+  minute?: number; // current match minute for IN_PLAY fixtures
 }
 
 export interface Standing {
@@ -39,7 +40,16 @@ export interface Standing {
   goalsFor: number;
   goalsAgainst: number;
   goalDifference: number;
-  form?: string; // e.g. "W,W,L,D,W"
+  form?: string;
+}
+
+export interface TopScorer {
+  position: number;
+  player: { id: number; name: string; nationality: string };
+  team: Team;
+  goals: number;
+  assists?: number;
+  penalties?: number;
 }
 
 export interface HeadToHeadResult {
@@ -58,13 +68,13 @@ export interface CompetitionRef {
   code: string;
 }
 
-// Interface that all football clients must satisfy
 export interface FootballClient {
   getFixtures(competitionCode: string, matchday?: number): Promise<Fixture[]>;
   getStandings(competitionCode: string): Promise<Standing[]>;
   getHeadToHead(matchId: number, limit?: number): Promise<HeadToHeadResult>;
-  // Find a scheduled match by team names (fuzzy)
+  getTopScorers(competitionCode: string): Promise<TopScorer[]>;
+  getLiveScores(competitionCode?: string): Promise<Fixture[]>;
+  getTeamForm(teamName: string, limit?: number): Promise<Fixture[]>;
   findMatch(homeTeam: string, awayTeam: string): Promise<Fixture | null>;
-  // List supported competitions
   listCompetitions(): Promise<CompetitionRef[]>;
 }

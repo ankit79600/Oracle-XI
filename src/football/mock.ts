@@ -5,6 +5,7 @@ import type {
   Standing,
   CompetitionRef,
   Team,
+  TopScorer,
 } from "./types.js";
 
 const MOCK_TEAMS: Record<string, Team> = {
@@ -23,13 +24,14 @@ function makeFixture(
   away: Team,
   daysFromNow: number,
   homeGoals: number | null = null,
-  awayGoals: number | null = null
+  awayGoals: number | null = null,
+  inPlay = false
 ): Fixture {
   const d = new Date(Date.now() + daysFromNow * 86_400_000);
   return {
     id: home.id * 1000 + away.id,
     utcDate: d.toISOString(),
-    status: homeGoals !== null ? "FINISHED" : "SCHEDULED",
+    status: inPlay ? "IN_PLAY" : homeGoals !== null ? "FINISHED" : "SCHEDULED",
     homeTeam: home,
     awayTeam: away,
     score: {
@@ -38,6 +40,7 @@ function makeFixture(
     },
     competition: { id: 2000, name: "FIFA World Cup 2026" },
     matchday: 1,
+    ...(inPlay ? { minute: 67 } : {}),
   };
 }
 
@@ -53,6 +56,10 @@ const MOCK_FIXTURES: Fixture[] = [
   makeFixture(MOCK_TEAMS.NED, MOCK_TEAMS.POR, -3, 1, 2),
 ];
 
+const MOCK_LIVE: Fixture[] = [
+  makeFixture(MOCK_TEAMS.FRA, MOCK_TEAMS.BRA, 0, 1, 0, true),
+];
+
 const MOCK_STANDINGS: Standing[] = [
   { position: 1, team: MOCK_TEAMS.ENG, playedGames: 3, won: 3, draw: 0, lost: 0, points: 9, goalsFor: 7, goalsAgainst: 2, goalDifference: 5, form: "W,W,W" },
   { position: 2, team: MOCK_TEAMS.GER, playedGames: 3, won: 2, draw: 1, lost: 0, points: 7, goalsFor: 5, goalsAgainst: 2, goalDifference: 3, form: "W,D,W" },
@@ -62,8 +69,19 @@ const MOCK_STANDINGS: Standing[] = [
   { position: 6, team: MOCK_TEAMS.ESP, playedGames: 3, won: 1, draw: 0, lost: 2, points: 3, goalsFor: 2, goalsAgainst: 5, goalDifference: -3, form: "L,W,L" },
 ];
 
+const MOCK_SCORERS: TopScorer[] = [
+  { position: 1, player: { id: 1, name: "Kylian Mbappé", nationality: "France" }, team: MOCK_TEAMS.FRA, goals: 5, assists: 2, penalties: 1 },
+  { position: 2, player: { id: 2, name: "Harry Kane", nationality: "England" }, team: MOCK_TEAMS.ENG, goals: 4, assists: 1, penalties: 2 },
+  { position: 3, player: { id: 3, name: "Julián Álvarez", nationality: "Argentina" }, team: MOCK_TEAMS.ARG, goals: 4, assists: 3, penalties: 0 },
+  { position: 4, player: { id: 4, name: "Cristiano Ronaldo", nationality: "Portugal" }, team: MOCK_TEAMS.POR, goals: 3, assists: 0, penalties: 1 },
+  { position: 5, player: { id: 5, name: "Vinicius Jr.", nationality: "Brazil" }, team: MOCK_TEAMS.BRA, goals: 3, assists: 2, penalties: 0 },
+  { position: 6, player: { id: 6, name: "Kai Havertz", nationality: "Germany" }, team: MOCK_TEAMS.GER, goals: 2, assists: 1, penalties: 0 },
+  { position: 7, player: { id: 7, name: "Álvaro Morata", nationality: "Spain" }, team: MOCK_TEAMS.ESP, goals: 2, assists: 0, penalties: 0 },
+  { position: 8, player: { id: 8, name: "Memphis Depay", nationality: "Netherlands" }, team: MOCK_TEAMS.NED, goals: 2, assists: 1, penalties: 1 },
+];
+
 export class MockFootballClient implements FootballClient {
-  async getFixtures(competitionCode: string, _matchday?: number): Promise<Fixture[]> {
+  async getFixtures(_competitionCode: string, _matchday?: number): Promise<Fixture[]> {
     return MOCK_FIXTURES;
   }
 
@@ -93,14 +111,30 @@ export class MockFootballClient implements FootballClient {
           0
         ),
         homeTeam: { wins: homeWins, draws: 1, losses: past.length - homeWins - 1 },
-        awayTeam: {
-          wins: past.length - homeWins - 1,
-          draws: 1,
-          losses: homeWins,
-        },
+        awayTeam: { wins: past.length - homeWins - 1, draws: 1, losses: homeWins },
       },
       matches: past,
     };
+  }
+
+  async getTopScorers(_competitionCode: string): Promise<TopScorer[]> {
+    return MOCK_SCORERS;
+  }
+
+  async getLiveScores(_competitionCode?: string): Promise<Fixture[]> {
+    return MOCK_LIVE;
+  }
+
+  async getTeamForm(teamName: string, limit = 5): Promise<Fixture[]> {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+    const tn = normalize(teamName);
+    return MOCK_FIXTURES.filter(
+      (f) =>
+        f.status === "FINISHED" &&
+        (normalize(f.homeTeam.name).includes(tn) || normalize(f.awayTeam.name).includes(tn))
+    )
+      .sort((a, b) => new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime())
+      .slice(0, limit);
   }
 
   async findMatch(homeTeam: string, awayTeam: string): Promise<Fixture | null> {
