@@ -12,11 +12,19 @@ describe("GET /health", () => {
     expect(res.body.mock).toBe(true);
   });
 
-  it("includes x402 pricing info", async () => {
+  it("includes x402 pricing info for all tiers", async () => {
     const res = await request(app).get("/health");
     expect(res.body.x402).toBeDefined();
     expect(res.body.x402.pricePro).toContain("0.01");
+    expect(res.body.x402.priceSonnet).toContain("0.006");
     expect(res.body.x402.priceQuick).toContain("0.003");
+    expect(res.body.x402.priceBatch).toBeDefined();
+  });
+
+  it("includes network info", async () => {
+    const res = await request(app).get("/health");
+    expect(res.body.network).toBe("testnet");
+    expect(res.body.chain).toContain("1439");
   });
 });
 
@@ -129,6 +137,17 @@ describe("GET /predict/demo", () => {
   });
 });
 
+describe("GET /predict/demo — sonnet tier", () => {
+  it("returns a prediction for sonnet tier", async () => {
+    const res = await request(app)
+      .get("/predict/demo")
+      .query({ home: "France", away: "Brazil", tier: "sonnet" });
+    expect(res.status).toBe(200);
+    expect(res.body.tier).toBe("sonnet");
+    expect(res.body.prediction).toBeDefined();
+  });
+});
+
 describe("x402-gated routes without payment", () => {
   it("GET /predict returns 402 with payment details", async () => {
     // DEMO_MODE=true so the demo middleware runs instead of the real one.
@@ -140,6 +159,18 @@ describe("x402-gated routes without payment", () => {
 
   it("GET /predict/quick returns 402 without payment", async () => {
     const res = await request(app).get("/predict/quick?home=England&away=Germany");
+    expect(res.status).toBe(402);
+  });
+
+  it("GET /predict/sonnet returns 402 without payment", async () => {
+    const res = await request(app).get("/predict/sonnet?home=England&away=Germany");
+    expect(res.status).toBe(402);
+  });
+
+  it("POST /predict/batch returns 402 without payment", async () => {
+    const res = await request(app)
+      .post("/predict/batch")
+      .send({ matches: [{ home: "England", away: "Germany" }, { home: "Brazil", away: "France" }] });
     expect(res.status).toBe(402);
   });
 });

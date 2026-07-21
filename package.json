@@ -1,6 +1,6 @@
 {
   "name": "oracle-xi",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "AI World Cup analyst MCP Server with x402 pay-per-call on Injective",
   "type": "module",
   "scripts": {
@@ -16,25 +16,25 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.3",
+    "@anthropic-ai/sdk": "^0.112.4",
     "@injectivelabs/x402": "0.1.0-rc.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.7.0",
     "dotenv": "^16.4.0",
-    "express": "^4.19.0",
+    "express": "^5.2.1",
     "node-cache": "^5.1.2",
-    "viem": "^2.20.0",
+    "viem": "^2.55.4",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.14.0",
-    "@types/supertest": "^6.0.3",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^2.1.9",
     "concurrently": "^8.2.0",
     "supertest": "^7.2.2",
     "tsx": "^4.15.0",
-    "typescript": "^5.4.0",
+    "typescript": "^5.9.0",
     "vitest": "^2.1.9"
   }
 }

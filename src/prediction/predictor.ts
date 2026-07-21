@@ -3,7 +3,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import type { Fixture, Standing, HeadToHeadResult } from "../football/types.js";
 
-export type PredictionTier = "quick" | "pro";
+export type PredictionTier = "quick" | "sonnet" | "pro";
 
 export interface PredictionInput {
   homeTeam: string;
@@ -40,6 +40,16 @@ const PredictionSchema = z.object({
   keyFactors: z.array(z.string()).min(1),
   recommendation: z.string().min(5),
 });
+
+// Cached system prompt — static Oracle persona sent as a system block with
+// cache_control so Claude reuses the KV cache across repeated prediction calls.
+const ORACLE_SYSTEM =
+  "You are The Oracle, an expert football analyst with deep knowledge of tactics, " +
+  "statistics, and team dynamics. You provide data-backed match predictions by " +
+  "carefully analysing fixture context, league standings, head-to-head records, " +
+  "and current form. Be analytical, cite specific numbers from the data, name " +
+  "players and tactical patterns where relevant, and do not hedge excessively. " +
+  "Your predictions are decisive and grounded in the evidence provided.";
 
 const predictionTool: Anthropic.Tool = {
   name: "submit_prediction",
@@ -79,6 +89,8 @@ const predictionTool: Anthropic.Tool = {
       "recommendation",
     ],
   },
+  // Cache the tool definition alongside the system prompt — both are static.
+  cache_control: { type: "ephemeral" },
 };
 
 function formatStandings(standings: Standing[], teamNames: string[]): string {
@@ -113,7 +125,9 @@ function formatH2H(h2h: HeadToHeadResult, home: string, away: string): string {
   ].join("\n");
 }
 
-function buildPrompt(input: PredictionInput): string {
+// Returns only the dynamic match context for the user message.
+// The Oracle persona is sent separately as a system message (cached).
+function buildMatchContext(input: PredictionInput): string {
   const blocks: string[] = [];
 
   if (input.fixture) {
@@ -141,7 +155,6 @@ function buildPrompt(input: PredictionInput): string {
   }
 
   return (
-    `You are The Oracle, an expert football analyst. Analyze the following match and provide a data-backed prediction.\n\n` +
     `## Match Context\n${blocks.join("\n")}\n\n` +
     `Predict the outcome of ${input.homeTeam} vs ${input.awayTeam} in the ${input.competition}. ` +
     `Be analytical, cite specific numbers from the data, and do not hedge excessively.`
@@ -206,6 +219,12 @@ function normaliseProbs(r: PredictionResult): PredictionResult {
   return r;
 }
 
+function tierParams(tier: PredictionTier): { model: string; maxTokens: number } {
+  if (tier === "pro") return { model: config.llm.proModel, maxTokens: 8000 };
+  if (tier === "sonnet") return { model: config.llm.sonnetModel, maxTokens: 4000 };
+  return { model: config.llm.quickModel, maxTokens: 1500 };
+}
+
 export async function predict(
   input: PredictionInput,
   tier: PredictionTier = "pro"
@@ -216,16 +235,17 @@ export async function predict(
   }
 
   const client = new Anthropic({ apiKey: config.llm.anthropicApiKey });
-  const model = tier === "pro" ? config.llm.proModel : config.llm.quickModel;
-  const prompt = buildPrompt(input);
+  const { model, maxTokens } = tierParams(tier);
+  const userContent = buildMatchContext(input);
 
   try {
     const message = await client.messages.create({
       model,
-      max_tokens: tier === "pro" ? 8000 : 1500,
+      max_tokens: maxTokens,
+      system: [{ type: "text", text: ORACLE_SYSTEM, cache_control: { type: "ephemeral" } }],
       tools: [predictionTool],
       tool_choice: { type: "tool", name: "submit_prediction" },
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: userContent }],
       ...(tier === "pro"
         ? { thinking: { type: "enabled" as const, budget_tokens: 5000 } }
         : {}),
@@ -255,17 +275,18 @@ export async function* streamPrediction(
   }
 
   const client = new Anthropic({ apiKey: config.llm.anthropicApiKey });
-  const prompt =
-    buildPrompt(input) +
+  const userContent =
+    buildMatchContext(input) +
     "\n\nFirst write a 3-paragraph analytical breakdown of this fixture, then call submit_prediction with your structured prediction.";
 
   const stream = client.messages.stream({
     model: config.llm.proModel,
     max_tokens: 8000,
     thinking: { type: "enabled" as const, budget_tokens: 5000 },
+    system: [{ type: "text", text: ORACLE_SYSTEM, cache_control: { type: "ephemeral" } }],
     tools: [predictionTool],
     tool_choice: { type: "auto" },
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content: userContent }],
   });
 
   for await (const event of stream) {

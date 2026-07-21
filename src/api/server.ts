@@ -2,16 +2,18 @@
  * Oracle API Server — x402-gated HTTP endpoint.
  *
  * Routes:
- *   GET /health               — liveness check (free)
- *   GET /fixtures             — upcoming matches (free)
- *   GET /standings            — league table (free)
- *   GET /h2h/:matchId         — head-to-head history (free)
- *   GET /live                 — in-play matches (free)
- *   GET /scorers/:competition — top scorers (free)
- *   GET /team-form            — last N results for a team (free)
- *   GET /predict/quick        — AI prediction, Haiku 4.5 (x402 — 0.003 USDC)
- *   GET /predict              — AI prediction, Opus 4.8 + thinking (x402 — 0.01 USDC)
- *   GET /predict/stream       — streaming prediction with live reasoning (x402 — 0.01 USDC)
+ *   GET /health                — liveness check (free)
+ *   GET /fixtures              — upcoming matches (free)
+ *   GET /standings             — league table (free)
+ *   GET /h2h/:matchId          — head-to-head history (free)
+ *   GET /live                  — in-play matches (free)
+ *   GET /scorers/:competition  — top scorers (free)
+ *   GET /team-form             — last N results for a team (free)
+ *   GET /predict/quick         — AI prediction, Haiku 4.5      (x402 — 0.003 USDC)
+ *   GET /predict/sonnet        — AI prediction, Sonnet 4.6     (x402 — 0.006 USDC)
+ *   GET /predict               — AI prediction, Opus 4.8+think (x402 — 0.01 USDC)
+ *   GET /predict/stream        — streaming prediction           (x402 — 0.01 USDC)
+ *   POST /predict/batch        — up to 5 quick predictions      (x402 — 0.01 USDC flat)
  */
 
 import "dotenv/config";
@@ -20,7 +22,6 @@ import { dirname, join } from "path";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { injectivePaymentMiddleware } from "@injectivelabs/x402/middleware";
 import { decodePaymentSignatureHeader } from "@injectivelabs/x402/client";
-import { INJECTIVE_TESTNET_CAIP2 } from "@injectivelabs/x402/networks";
 import { config, validateApiConfig } from "../config.js";
 import { LiveFootballClient } from "../football/client.js";
 import { MockFootballClient } from "../football/mock.js";
@@ -42,17 +43,18 @@ app.use(express.static(join(dirname(fileURLToPath(import.meta.url)), "..", "..",
 function buildPaymentMiddleware(
   endpoint: string,
   price: string,
-  description: string
+  description: string,
+  method: "GET" | "POST" = "GET"
 ) {
   if (!config.api.demoMode) {
     return injectivePaymentMiddleware(
       {
-        [`GET ${endpoint}`]: {
+        [`${method} ${endpoint}`]: {
           description,
           mimeType: "application/json",
           accepts: [
             {
-              network: INJECTIVE_TESTNET_CAIP2,
+              network: config.chain.caip2,
               asset: config.x402.tokenAddress,
               amount: price,
               payTo: config.x402.recipient,
@@ -89,7 +91,7 @@ function buildPaymentMiddleware(
         accepts: [
           {
             scheme: "exact" as const,
-            network: INJECTIVE_TESTNET_CAIP2,
+            network: config.chain.caip2,
             amount: price,
             payTo: config.x402.recipient,
             maxTimeoutSeconds: 120,
@@ -114,7 +116,7 @@ function buildPaymentMiddleware(
     const receipt = {
       success: true,
       transaction: fakeTx,
-      network: INJECTIVE_TESTNET_CAIP2,
+      network: config.chain.caip2,
       payer: payload.payload.authorization.from,
       amount: price,
     };
@@ -122,7 +124,7 @@ function buildPaymentMiddleware(
     res.setHeader("PAYMENT-RESPONSE", encoded);
     res.setHeader("X-PAYMENT-RESPONSE", encoded);
     console.log(
-      `[x402-demo] ${endpoint} accepted from ${payload.payload.authorization.from} (${price} units, settlement skipped)`
+      `[x402-demo] ${method} ${endpoint} accepted from ${payload.payload.authorization.from} (${price} units, settlement skipped)`
     );
     return next();
   };
@@ -132,6 +134,12 @@ const quickPaymentMiddleware = buildPaymentMiddleware(
   "/predict/quick",
   config.x402.priceQuick,
   "AI match prediction — Quick (Haiku 4.5, fast, 0.003 USDC)"
+);
+
+const sonnetPaymentMiddleware = buildPaymentMiddleware(
+  "/predict/sonnet",
+  config.x402.priceSonnet,
+  "AI match prediction — Sonnet (Sonnet 4.6, balanced, 0.006 USDC)"
 );
 
 const proPaymentMiddleware = buildPaymentMiddleware(
@@ -146,19 +154,29 @@ const streamPaymentMiddleware = buildPaymentMiddleware(
   "Streaming AI match prediction with live reasoning — Pro (Opus 4.8, 0.01 USDC)"
 );
 
+const batchPaymentMiddleware = buildPaymentMiddleware(
+  "/predict/batch",
+  config.x402.priceBatch,
+  "Batch AI predictions — up to 5 matches, Quick tier (0.01 USDC flat)",
+  "POST"
+);
+
 // ── free routes ───────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    chain: `${config.chain.chainId} (${INJECTIVE_TESTNET_CAIP2})`,
+    chain: `${config.chain.chainId} (${config.chain.caip2})`,
+    network: config.chain.isMainnet ? "mainnet" : "testnet",
     mock: config.football.useMock,
     x402: {
       recipient: config.x402.recipient,
       token: config.x402.tokenAddress,
       pricePro: `${config.x402.price} (0.01 USDC)`,
+      priceSonnet: `${config.x402.priceSonnet} (0.006 USDC)`,
       priceQuick: `${config.x402.priceQuick} (0.003 USDC)`,
-      network: INJECTIVE_TESTNET_CAIP2,
+      priceBatch: `${config.x402.priceBatch} (0.01 USDC, up to 5)`,
+      network: config.chain.caip2,
     },
   });
 });
@@ -251,6 +269,25 @@ async function gatherContext(homeTeam: string, awayTeam: string, competition: st
   };
 }
 
+function predictionResponse(
+  tier: string,
+  model: string,
+  homeTeam: string,
+  awayTeam: string,
+  competition: string,
+  result: Awaited<ReturnType<typeof predict>>
+) {
+  return {
+    tier,
+    model,
+    match: `${homeTeam} vs ${awayTeam}`,
+    competition,
+    prediction: result,
+    dataSource: config.football.useMock ? "mock" : "football-data.org",
+    chain: config.chain.caip2,
+  };
+}
+
 // ── x402-gated: quick tier ────────────────────────────────────────────────────
 
 app.get("/predict/quick", quickPaymentMiddleware, async (req, res) => {
@@ -266,18 +303,31 @@ app.get("/predict/quick", quickPaymentMiddleware, async (req, res) => {
 
     const input = await gatherContext(homeTeam, awayTeam, competition);
     const result = await predict(input, "quick");
-
-    res.json({
-      tier: "quick",
-      model: config.llm.quickModel,
-      match: `${homeTeam} vs ${awayTeam}`,
-      competition,
-      prediction: result,
-      dataSource: config.football.useMock ? "mock" : "football-data.org",
-      chain: INJECTIVE_TESTNET_CAIP2,
-    });
+    res.json(predictionResponse("quick", config.llm.quickModel, homeTeam, awayTeam, competition, result));
   } catch (e) {
     console.error("[predict/quick]", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ── x402-gated: sonnet tier ───────────────────────────────────────────────────
+
+app.get("/predict/sonnet", sonnetPaymentMiddleware, async (req, res) => {
+  try {
+    const homeTeam = (req.query.home as string) || "";
+    const awayTeam = (req.query.away as string) || "";
+    const competition = (req.query.competition as string) || "FIFA World Cup 2026";
+
+    if (!homeTeam || !awayTeam) {
+      res.status(400).json({ error: "Missing ?home=&away= query params" });
+      return;
+    }
+
+    const input = await gatherContext(homeTeam, awayTeam, competition);
+    const result = await predict(input, "sonnet");
+    res.json(predictionResponse("sonnet", config.llm.sonnetModel, homeTeam, awayTeam, competition, result));
+  } catch (e) {
+    console.error("[predict/sonnet]", e);
     res.status(500).json({ error: String(e) });
   }
 });
@@ -297,16 +347,7 @@ app.get("/predict", proPaymentMiddleware, async (req, res) => {
 
     const input = await gatherContext(homeTeam, awayTeam, competition);
     const result = await predict(input, "pro");
-
-    res.json({
-      tier: "pro",
-      model: config.llm.proModel,
-      match: `${homeTeam} vs ${awayTeam}`,
-      competition,
-      prediction: result,
-      dataSource: config.football.useMock ? "mock" : "football-data.org",
-      chain: INJECTIVE_TESTNET_CAIP2,
-    });
+    res.json(predictionResponse("pro", config.llm.proModel, homeTeam, awayTeam, competition, result));
   } catch (e) {
     console.error("[predict]", e);
     res.status(500).json({ error: String(e) });
@@ -350,7 +391,7 @@ app.get("/predict/stream", streamPaymentMiddleware, async (req, res) => {
           match: `${homeTeam} vs ${awayTeam}`,
           competition,
           dataSource: config.football.useMock ? "mock" : "football-data.org",
-          chain: INJECTIVE_TESTNET_CAIP2,
+          chain: config.chain.caip2,
         });
       }
     }
@@ -364,13 +405,75 @@ app.get("/predict/stream", streamPaymentMiddleware, async (req, res) => {
   }
 });
 
+// ── x402-gated: batch predictions (up to 5 quick) ────────────────────────────
+
+interface BatchMatch {
+  home: string;
+  away: string;
+  competition?: string;
+}
+
+app.post("/predict/batch", batchPaymentMiddleware, async (req, res) => {
+  try {
+    const { matches } = req.body as { matches: BatchMatch[] };
+
+    if (!Array.isArray(matches) || matches.length === 0) {
+      res.status(400).json({ error: "Body must contain a non-empty matches array" });
+      return;
+    }
+    if (matches.length > 5) {
+      res.status(400).json({ error: "Maximum 5 matches per batch request" });
+      return;
+    }
+
+    const invalid = matches.find((m) => !m.home || !m.away);
+    if (invalid) {
+      res.status(400).json({ error: "Each match must have home and away fields" });
+      return;
+    }
+
+    const results = await Promise.all(
+      matches.map(async (m) => {
+        const competition = m.competition || "FIFA World Cup 2026";
+        try {
+          const input = await gatherContext(m.home, m.away, competition);
+          const prediction = await predict(input, "quick");
+          return {
+            match: `${m.home} vs ${m.away}`,
+            competition,
+            prediction,
+            tier: "quick",
+            model: config.llm.quickModel,
+            dataSource: config.football.useMock ? "mock" : "football-data.org",
+          };
+        } catch (e) {
+          return {
+            match: `${m.home} vs ${m.away}`,
+            competition,
+            error: String(e),
+          };
+        }
+      })
+    );
+
+    res.json({
+      count: results.length,
+      chain: config.chain.caip2,
+      results,
+    });
+  } catch (e) {
+    console.error("[predict/batch]", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // ── demo endpoints (no x402 — for dashboard; requires DEMO_MODE=true) ────────
 
 app.get("/predict/demo", async (req, res) => {
   if (!config.api.demoMode) {
     res.status(403).json({
       error: "Demo endpoint requires DEMO_MODE=true",
-      hint: "Use /predict or /predict/quick (x402-gated) for production, or set DEMO_MODE=true",
+      hint: "Use /predict, /predict/sonnet, or /predict/quick (x402-gated) for production, or set DEMO_MODE=true",
     });
     return;
   }
@@ -378,7 +481,8 @@ app.get("/predict/demo", async (req, res) => {
   const homeTeam = (req.query.home as string) || "";
   const awayTeam = (req.query.away as string) || "";
   const competition = (req.query.competition as string) || "FIFA World Cup 2026";
-  const tier = ((req.query.tier as string) === "quick" ? "quick" : "pro") as "quick" | "pro";
+  const rawTier = req.query.tier as string;
+  const tier = (["quick", "sonnet", "pro"].includes(rawTier) ? rawTier : "pro") as "quick" | "sonnet" | "pro";
 
   if (!homeTeam || !awayTeam) {
     res.status(400).json({ error: "Missing ?home=&away= query params" });
@@ -388,14 +492,11 @@ app.get("/predict/demo", async (req, res) => {
   try {
     const input = await gatherContext(homeTeam, awayTeam, competition);
     const result = await predict(input, tier);
-    res.json({
-      tier,
-      model: tier === "pro" ? config.llm.proModel : config.llm.quickModel,
-      match: `${homeTeam} vs ${awayTeam}`,
-      competition,
-      prediction: result,
-      dataSource: config.football.useMock ? "mock" : "football-data.org",
-    });
+    const model =
+      tier === "pro" ? config.llm.proModel
+      : tier === "sonnet" ? config.llm.sonnetModel
+      : config.llm.quickModel;
+    res.json(predictionResponse(tier, model, homeTeam, awayTeam, competition, result));
   } catch (e) {
     console.error("[predict/demo]", e);
     res.status(500).json({ error: String(e) });
@@ -464,8 +565,11 @@ if (!process.env.VITEST) {
   app.listen(config.api.port, () => {
     console.log(`Oracle API  →  http://localhost:${config.api.port}`);
     console.log(`Quick tier  →  ${config.x402.priceQuick} USDC units (/predict/quick)`);
+    console.log(`Sonnet tier →  ${config.x402.priceSonnet} USDC units (/predict/sonnet)`);
     console.log(`Pro tier    →  ${config.x402.price} USDC units (/predict, /predict/stream)`);
+    console.log(`Batch       →  ${config.x402.priceBatch} USDC units (/predict/batch, POST)`);
     console.log(`Recipient   →  ${config.x402.recipient}`);
+    console.log(`Network     →  ${config.chain.caip2} (${config.chain.isMainnet ? "mainnet" : "testnet"})`);
     console.log(`Mock data   →  ${config.football.useMock}`);
   });
 }
