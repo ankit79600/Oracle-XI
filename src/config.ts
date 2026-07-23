@@ -58,7 +58,8 @@ export const config = {
     quickModel: "claude-haiku-4-5-20251001", // fast, cheap
   },
   api: {
-    port: parseInt(optional("API_PORT", "3002"), 10),
+    // Railway injects PORT; fall back to API_PORT for local dev
+    port: parseInt(process.env.PORT || optional("API_PORT", "3002"), 10),
     demoMode: process.env.DEMO_MODE === "true",
   },
   wallet: {
@@ -67,10 +68,12 @@ export const config = {
 } as const;
 
 export function validateApiConfig() {
-  if (!config.x402.recipient || config.x402.recipient.length < 10)
-    throw new Error("X402_RECIPIENT is required (oracle treasury wallet that receives USDC)");
-  if (!config.x402.facilitatorKey || config.x402.facilitatorKey.length < 10)
-    throw new Error("X402_FACILITATOR_KEY (or PRIVATE_KEY) is required for the facilitator");
+  if (!config.api.demoMode) {
+    if (!config.x402.recipient || config.x402.recipient.length < 10)
+      throw new Error("X402_RECIPIENT is required (oracle treasury wallet that receives USDC)");
+    if (!config.x402.facilitatorKey || config.x402.facilitatorKey.length < 10)
+      throw new Error("X402_FACILITATOR_KEY (or PRIVATE_KEY) is required for the facilitator");
+  }
   if (!config.llm.anthropicApiKey)
     console.warn("[config] ANTHROPIC_API_KEY not set — predict will use rule-based fallback");
   if (config.chain.isMainnet)
